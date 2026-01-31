@@ -4,18 +4,9 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 7860;
 
-// Startup Checks
-try {
-    const pythonVersion = execSync('python3 --version').toString().trim();
-    const ytdlpVersion = execSync('yt-dlp --version').toString().trim();
-    console.log(`🐍 System: ${pythonVersion} | 📦 Tool: ${ytdlpVersion}`);
-} catch (err) {
-    console.error('❌ Missing Prerequisites:', err.message);
-}
-
-// Cookies Load කිරීම
+// Cookies configuration
 if (process.env.YT_COOKIES) {
-    fs.writeFileSync('cookies.txt', process.env.YT_COOKIES);
+    fs.writeFileSync('cookies.txt', process.env.YT_COOKIES.trim());
     console.log('🍪 Cookies loaded');
 }
 
@@ -27,41 +18,50 @@ app.get('/download', (req, res) => {
     const videoUrl = req.query.url;
     if (!videoUrl) return res.status(400).json({ error: 'URL required' });
 
-    console.log(`📥 Processing: ${videoUrl}`);
+    console.log(`📥 Request URL: ${videoUrl}`);
 
-    // Base Command එක
-    let baseCmd = 'yt-dlp --get-url --no-playlist --no-check-certificates --no-warnings ';
-    baseCmd += '--add-header "User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36" ';
+    // Command එක සරල කරමු: -g කියන්නේ URL එක විතරක් ගන්න එක
+    // m4a වලට priority දෙනවා ඒක ගොඩක් වෙලාවට වැඩ කරන නිසා
+    let command = `yt-dlp -f "ba[ext=m4a]/ba/best" -g --no-playlist --no-check-certificates `;
     
     if (fs.existsSync('cookies.txt')) {
-        baseCmd += '--cookies cookies.txt ';
+        command += `--cookies cookies.txt `;
     }
+    
+    command += `"${videoUrl}"`;
 
-    // විවිධ format ක්‍රම උත්සාහ කිරීම
-    const attempts = [
-        `${baseCmd}-f "ba[ext=m4a]" "${videoUrl}"`, 
-        `${baseCmd}-f "ba/b" "${videoUrl}"`,       
-        `${baseCmd}"${videoUrl}"`                   
-    ];
-
-    let currentAttempt = 0;
-
-    function tryDownload() {
-        if (currentAttempt >= attempts.length) {
-            return res.status(500).json({ error: "All attempts failed" });
+    exec(command, { timeout: 40000 }, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`❌ YT-DLP Error: ${stderr}`);
+            // Error එක 500 විදියට යවන්නේ නැතුව 200 විදියටම යවමු Bot එකට තේරුම් ගන්න ලේසි වෙන්න
+            return res.status(200).json({ 
+                success: false, 
+                error: "YouTube Blocked or Format Error",
+                details: stderr.split('\n')[0]
+            });
         }
 
-        exec(attempts[currentAttempt], { timeout: 35000 }, (error, stdout) => {
-            if (error || !stdout.trim()) {
-                currentAttempt++;
-                tryDownload();
-                return;
-            }
-            res.json({ success: true, audio_url: stdout.trim() });
-        });
-    }
+        const urls = stdout.trim().split('\n');
+        const finalUrl = urls[0]; // පළවෙනි URL එක ගමු
 
-    tryDownload();
+        if (finalUrl && finalUrl.startsWith('http')) {
+            console.log(`✅ Success!`);
+            return res.json({
+                success: true,
+                audio_url: finalUrl
+            });
+        } else {
+            return res.json({
+                success: false,
+                error: "Invalid URL returned from YouTube"
+            });
+        }
+    });
 });
 
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// Server crash වීම වැළැක්වීමට
+process.on('uncaughtException', (err) => {
+    console.error('Critical Error:', err.message);
+});
+
+app.listen(PORT, () => console.log(`🚀 API Running on port ${PORT}`));
