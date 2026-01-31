@@ -1,53 +1,184 @@
 const express = require('express');
-const ytdl = require('@distube/ytdl-core');
+const { exec } = require('child_process');
+const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 7860;
 
-app.get('/download', async (req, res) => {
-    const videoUrl = req.query.url;
-    if (!videoUrl) return res.status(400).json({ error: 'URL required' });
+// Render Secret එකෙන් Cookies ෆයිල් එකක් හදනවා
+if (process.env.YT_COOKIES) {
+    fs.writeFileSync('cookies.txt', process.env.YT_COOKIES);
+    console.log("✅ Cookies loaded from Secret to cookies.txt");
+}
 
-    try {
-        console.log(`📥 Processing: ${videoUrl}`);
-
-        const options = {
-            requestOptions: {
-                headers: {
-                    // Render variable එකෙන් cookies ගන්නවා
-                    'cookie': process.env.YT_COOKIES || '',
-                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-                    'accept': '*/*',
-                    'accept-language': 'en-US,en;q=0.9',
-                    'origin': 'https://www.youtube.com',
-                    'referer': 'https://www.youtube.com/'
-                }
-            }
-        };
-
-        const info = await ytdl.getInfo(videoUrl, options);
-        
-        const format = ytdl.chooseFormat(info.formats, { 
-            quality: 'highestaudio', 
-            filter: 'audioonly' 
-        });
-
-        res.json({
-            success: true,
-            title: info.videoDetails.title,
-            audio_url: format.url,
-            thumbnail: info.videoDetails.thumbnails[0].url,
-            author: info.videoDetails.author.name
-        });
-
-        console.log(`✅ Success: ${info.videoDetails.title}`);
-
-    } catch (error) {
-        console.error('❌ API ERROR:', error.message);
-        res.status(500).json({ 
-            error: 'සින්දුව ලබා ගැනීමට නොහැකි විය.', 
-            details: error.message 
-        });
-    }
+app.get('/', (req, res) => {
+    res.json({ status: "Online", tool: "yt-dlp (Python Version)" });
 });
 
-app.listen(PORT, () => console.log(`🚀 API is running on port ${PORT}`));
+app.get('/download', (req, res) => {
+    const videoUrl = req.query.url;
+
+    if (!videoUrl) {
+        return res.status(400).json({ error: 'URL required' });
+    }
+
+    console.log(`📥 Processing: ${videoUrl}`);
+
+    // yt-dlp Command එක හදනවා
+    // --cookies cookies.txt : Cookies පාවිච්චි කරන්න
+    // -f bestaudio : Audio විතරක් ගන්න
+    // --get-url : Download නොකර Link එක විතරක් එවන්න
+    
+    let command = `yt-dlp -f bestaudio --get-url --no-warnings "${videoUrl}"`;
+
+    // Cookies file එක තියෙනවා නම් විතරක් ඒක පාවිච්චි කරන්න
+    if (fs.existsSync('cookies.txt')) {
+        command = `yt-dlp -f bestaudio --get-url --cookies cookies.txt --no-warnings "${videoUrl}"`;
+    }
+
+    exec(command, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`❌ Error: ${stderr}`);
+            // Bot error එකක් ආවොත් කියනවා
+            if (stderr.includes("Sign in")) {
+                return res.status(403).json({ error: "YouTube Blocked IP. Need valid cookies." });
+            }
+            return res.status(500).json({ error: "Download Failed", details: stderr });
+        }
+
+        // Output එකෙන් Link එක ගන්නවා
+        const audioUrl = stdout.trim();
+        
+        // අමතර විස්තර ගන්න ඕනේ නම් තව command එකක් run කරන්න වෙනවා, 
+        // නමුත් දැනට ලින්ක් එක විතරක් යවමු.
+        res.json({
+            success: true,
+            audio_url: audioUrl
+        });
+        
+        console.log("✅ Success!");
+    });
+});
+
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));const express = require('express');
+const { exec } = require('child_process');
+const fs = require('fs');
+const app = express();
+const PORT = process.env.PORT || 7860;
+
+// Render Secret එකෙන් Cookies ෆයිල් එකක් හදනවා
+if (process.env.YT_COOKIES) {
+    fs.writeFileSync('cookies.txt', process.env.YT_COOKIES);
+    console.log("✅ Cookies loaded from Secret to cookies.txt");
+}
+
+app.get('/', (req, res) => {
+    res.json({ status: "Online", tool: "yt-dlp (Python Version)" });
+});
+
+app.get('/download', (req, res) => {
+    const videoUrl = req.query.url;
+
+    if (!videoUrl) {
+        return res.status(400).json({ error: 'URL required' });
+    }
+
+    console.log(`📥 Processing: ${videoUrl}`);
+
+    // yt-dlp Command එක හදනවා
+    // --cookies cookies.txt : Cookies පාවිච්චි කරන්න
+    // -f bestaudio : Audio විතරක් ගන්න
+    // --get-url : Download නොකර Link එක විතරක් එවන්න
+    
+    let command = `yt-dlp -f bestaudio --get-url --no-warnings "${videoUrl}"`;
+
+    // Cookies file එක තියෙනවා නම් විතරක් ඒක පාවිච්චි කරන්න
+    if (fs.existsSync('cookies.txt')) {
+        command = `yt-dlp -f bestaudio --get-url --cookies cookies.txt --no-warnings "${videoUrl}"`;
+    }
+
+    exec(command, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`❌ Error: ${stderr}`);
+            // Bot error එකක් ආවොත් කියනවා
+            if (stderr.includes("Sign in")) {
+                return res.status(403).json({ error: "YouTube Blocked IP. Need valid cookies." });
+            }
+            return res.status(500).json({ error: "Download Failed", details: stderr });
+        }
+
+        // Output එකෙන් Link එක ගන්නවා
+        const audioUrl = stdout.trim();
+        
+        // අමතර විස්තර ගන්න ඕනේ නම් තව command එකක් run කරන්න වෙනවා, 
+        // නමුත් දැනට ලින්ක් එක විතරක් යවමු.
+        res.json({
+            success: true,
+            audio_url: audioUrl
+        });
+        
+        console.log("✅ Success!");
+    });
+});
+
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));const express = require('express');
+const { exec } = require('child_process');
+const fs = require('fs');
+const app = express();
+const PORT = process.env.PORT || 7860;
+
+// Render Secret එකෙන් Cookies ෆයිල් එකක් හදනවා
+if (process.env.YT_COOKIES) {
+    fs.writeFileSync('cookies.txt', process.env.YT_COOKIES);
+    console.log("✅ Cookies loaded from Secret to cookies.txt");
+}
+
+app.get('/', (req, res) => {
+    res.json({ status: "Online", tool: "yt-dlp (Python Version)" });
+});
+
+app.get('/download', (req, res) => {
+    const videoUrl = req.query.url;
+
+    if (!videoUrl) {
+        return res.status(400).json({ error: 'URL required' });
+    }
+
+    console.log(`📥 Processing: ${videoUrl}`);
+
+    // yt-dlp Command එක හදනවා
+    // --cookies cookies.txt : Cookies පාවිච්චි කරන්න
+    // -f bestaudio : Audio විතරක් ගන්න
+    // --get-url : Download නොකර Link එක විතරක් එවන්න
+    
+    let command = `yt-dlp -f bestaudio --get-url --no-warnings "${videoUrl}"`;
+
+    // Cookies file එක තියෙනවා නම් විතරක් ඒක පාවිච්චි කරන්න
+    if (fs.existsSync('cookies.txt')) {
+        command = `yt-dlp -f bestaudio --get-url --cookies cookies.txt --no-warnings "${videoUrl}"`;
+    }
+
+    exec(command, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`❌ Error: ${stderr}`);
+            // Bot error එකක් ආවොත් කියනවා
+            if (stderr.includes("Sign in")) {
+                return res.status(403).json({ error: "YouTube Blocked IP. Need valid cookies." });
+            }
+            return res.status(500).json({ error: "Download Failed", details: stderr });
+        }
+
+        // Output එකෙන් Link එක ගන්නවා
+        const audioUrl = stdout.trim();
+        
+        // අමතර විස්තර ගන්න ඕනේ නම් තව command එකක් run කරන්න වෙනවා, 
+        // නමුත් දැනට ලින්ක් එක විතරක් යවමු.
+        res.json({
+            success: true,
+            audio_url: audioUrl
+        });
+        
+        console.log("✅ Success!");
+    });
+});
+
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
