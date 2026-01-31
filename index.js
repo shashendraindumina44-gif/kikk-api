@@ -1,18 +1,4 @@
-const express = require('express');
-const { exec } = require('child_process');
-const fs = require('fs');
-const app = express();
-const PORT = process.env.PORT || 7860;
-
-// 1. Render Secret එකෙන් Cookies ෆයිල් එකක් හදනවා
-if (process.env.YT_COOKIES) {
-    fs.writeFileSync('cookies.txt', process.env.YT_COOKIES);
-    console.log("✅ Cookies loaded from Secret to cookies.txt");
-}
-
-app.get('/', (req, res) => {
-    res.json({ status: "Online", tool: "yt-dlp (Python Version)" });
-});
+// ... පරණ කේතය ...
 
 app.get('/download', (req, res) => {
     const videoUrl = req.query.url;
@@ -23,25 +9,26 @@ app.get('/download', (req, res) => {
 
     console.log(`📥 Processing: ${videoUrl}`);
 
-    // yt-dlp Command එක හදනවා
-    let command = `yt-dlp -f bestaudio --get-url --no-warnings "${videoUrl}"`;
+    // 🔥 අපි මෙතන format එක වෙනස් කරනවා: "ba/b" කියන්නේ bestaudio නැත්නම් best කියන එකයි.
+    // ඒ වගේම --no-playlist දානවා වැරදිලා playlist එකක් ආවොත් ඒක නවත්තන්න.
+    let formatParams = "-f \"ba/b\" --no-playlist --get-url --no-warnings";
+
+    let command = `yt-dlp ${formatParams} "${videoUrl}"`;
 
     // Cookies file එක තියෙනවා නම් ඒක පාවිච්චි කරනවා
     if (fs.existsSync('cookies.txt')) {
-        command = `yt-dlp -f bestaudio --get-url --cookies cookies.txt --no-warnings "${videoUrl}"`;
+        command = `yt-dlp ${formatParams} --cookies cookies.txt "${videoUrl}"`;
     }
 
     exec(command, (error, stdout, stderr) => {
         if (error) {
             console.error(`❌ Error: ${stderr}`);
-            // Bot error එකක් ආවොත් user ට කියනවා
             if (stderr.includes("Sign in")) {
                 return res.status(403).json({ error: "YouTube Blocked IP. Need valid cookies." });
             }
             return res.status(500).json({ error: "Download Failed", details: stderr });
         }
 
-        // Output එකෙන් Link එක ගන්නවා
         const audioUrl = stdout.trim();
         
         if (!audioUrl) {
@@ -57,4 +44,50 @@ app.get('/download', (req, res) => {
     });
 });
 
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+// ... පරණ කේතය ...// ... පරණ කේතය ...
+
+app.get('/download', (req, res) => {
+    const videoUrl = req.query.url;
+
+    if (!videoUrl) {
+        return res.status(400).json({ error: 'URL required' });
+    }
+
+    console.log(`📥 Processing: ${videoUrl}`);
+
+    // 🔥 අපි මෙතන format එක වෙනස් කරනවා: "ba/b" කියන්නේ bestaudio නැත්නම් best කියන එකයි.
+    // ඒ වගේම --no-playlist දානවා වැරදිලා playlist එකක් ආවොත් ඒක නවත්තන්න.
+    let formatParams = "-f \"ba/b\" --no-playlist --get-url --no-warnings";
+
+    let command = `yt-dlp ${formatParams} "${videoUrl}"`;
+
+    // Cookies file එක තියෙනවා නම් ඒක පාවිච්චි කරනවා
+    if (fs.existsSync('cookies.txt')) {
+        command = `yt-dlp ${formatParams} --cookies cookies.txt "${videoUrl}"`;
+    }
+
+    exec(command, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`❌ Error: ${stderr}`);
+            if (stderr.includes("Sign in")) {
+                return res.status(403).json({ error: "YouTube Blocked IP. Need valid cookies." });
+            }
+            return res.status(500).json({ error: "Download Failed", details: stderr });
+        }
+
+        const audioUrl = stdout.trim();
+        
+        if (!audioUrl) {
+             return res.status(500).json({ error: "No URL found" });
+        }
+
+        res.json({
+            success: true,
+            audio_url: audioUrl
+        });
+        
+        console.log("✅ Success!");
+    });
+});
+
+// ... පරණ කේතය ...
