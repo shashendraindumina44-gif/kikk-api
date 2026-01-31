@@ -3,32 +3,28 @@ const ytdl = require('@distube/ytdl-core');
 const app = express();
 const PORT = process.env.PORT || 7860;
 
-// 1. Render Secret එකෙන් Cookies JSON එක parse කරගැනීම
-let cookies = [];
-try {
-    const rawCookies = process.env.YT_COOKIES || "[]";
-    cookies = JSON.parse(rawCookies);
-    console.log("✅ Cookies loaded successfully");
-} catch (e) {
-    console.error("❌ Cookie parsing error. Check if JSON is valid.");
-}
-
-// 2. අලුත් YTDL Agent එකක් නිර්මාණය කිරීම
-// මෙය Bot detection මගහරින්න අත්‍යවශ්‍යයි
-const agent = ytdl.createAgent(cookies);
-
 app.get('/download', async (req, res) => {
     const videoUrl = req.query.url;
-
-    if (!videoUrl) {
-        return res.status(400).json({ error: 'කරුණාකර YouTube URL එකක් ලබා දෙන්න.' });
-    }
+    if (!videoUrl) return res.status(400).json({ error: 'URL required' });
 
     try {
-        console.log(`📥 Processing Request for: ${videoUrl}`);
+        console.log(`📥 Processing: ${videoUrl}`);
 
-        // 3. Agent එක භාවිතා කරමින් Info ලබා ගැනීම
-        const info = await ytdl.getInfo(videoUrl, { agent });
+        const options = {
+            requestOptions: {
+                headers: {
+                    // Render variable එකෙන් cookies ගන්නවා
+                    'cookie': process.env.YT_COOKIES || '',
+                    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                    'accept': '*/*',
+                    'accept-language': 'en-US,en;q=0.9',
+                    'origin': 'https://www.youtube.com',
+                    'referer': 'https://www.youtube.com/'
+                }
+            }
+        };
+
+        const info = await ytdl.getInfo(videoUrl, options);
         
         const format = ytdl.chooseFormat(info.formats, { 
             quality: 'highestaudio', 
@@ -54,6 +50,4 @@ app.get('/download', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`🚀 YouTube API is running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🚀 API is running on port ${PORT}`));
